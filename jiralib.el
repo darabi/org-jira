@@ -213,6 +213,7 @@ when invoking it through `jiralib-call', the call shoulbe be:
 
 (defun jiralib--utf-8-parser ()
   "Decode the HTTP response using the charset UTF-8."
+  (set-buffer-multibyte t)
   (decode-coding-region (point-min) (point-max) 'utf-8)
   (json-read))
 
