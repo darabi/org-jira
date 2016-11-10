@@ -335,7 +335,7 @@ Example: \"2012-01-09T08:59:15.000Z\" becomes \"2012-01-09
       (setq tmp ""))
     (cond ((eq key 'components)
            (org-jira-get-issue-components issue))
-          ((member key '(created updated startDate))
+          ((member key '(created updated startDate started))
            (org-jira-transform-time-format tmp))
           ((eq key 'status)
            (org-jira-find-value issue 'fields 'status 'statusCategory 'name))
@@ -650,7 +650,7 @@ See`org-jira-get-issue-list'"
   "Update a worklog for the current issue."
   (interactive)
   (let* ((issue-id (org-jira-get-from-org 'issue 'key))
-         (worklog-id (org-jira-get-from-org 'worklog 'id))
+         (worklog-id (org-jira-get-from-org 'worklog 'key))
          (already_submitted (org-jira-get-from-org 'worklog 'submitted_on))
          ;;(timeSpent (org-jira-get-from-org 'worklog 'timeSpent))
          (timeSpent (number-to-string (org-clock-sum-current-item)))
@@ -659,7 +659,7 @@ See`org-jira-get-issue-list'"
                       (read-string "Input the time you spent (such as 3w 1d 2h): ")))
          (timeSpent (replace-regexp-in-string " \\(\\sw\\)\\sw*\\(,\\|$\\)" "\\1" timeSpent))
          (startDate (format-time-string "%Y-%m-%dT%T.000+0000" (org-clock-start-time-current-item)))
-         ;;         (startDate (org-jira-get-from-org 'worklog 'startDate))
+         ;;         (startDate (org-jira-get-from-org 'worklog 'started))
          (startDate (if startDate
                         startDate
                       (org-jira-time-format-to-jira (org-read-date nil nil nil "Input when did you start"))))
@@ -667,9 +667,9 @@ See`org-jira-get-issue-list'"
          (worklog `((comment . ,comment)
                     (timeSpent . ,timeSpent)
                     (timeSpentInSeconds . 10)
-                    (startDate . ,startDate)))
+                    (started . ,startDate)))
          (worklog (if worklog-id
-                      (cons `(id . ,(replace-regexp-in-string "^worklog-" "" worklog-id)) worklog)
+                      (cons `(id . ,worklog-id) worklog)
                     worklog)))
     (if worklog-id
         (jiralib-update-worklog worklog)
@@ -768,15 +768,17 @@ See`org-jira-get-issue-list'"
 (defun org-jira-update-worklogs-for-current-issue ()
   "Update the worklogs for the current issue."
   (let* ((issue-id (org-jira-get-from-org 'issue 'key))
-         (worklogs (jiralib-get-worklogs issue-id)))
+         (worklogs (cdr (assoc 'worklogs (jiralib-get-worklogs issue-id)))))
     (mapc (lambda (worklog)
             (ensure-on-issue-id issue-id
-              (let* ((worklog-id (concat "worklog-" (cdr (assoc 'id worklog))))
-                     (worklog-author (or (car (rassoc
-                                               (cdr (assoc 'author worklog))
-                                               jira-users))
-                                         (cdr (assoc 'author worklog))))
-                     (worklog-headline (format "Worklog: %s" worklog-author)))
+              (let* ((worklog-id (cdr (assoc 'id worklog)))
+                     (author (cdr (assoc 'author worklog)))
+                     (user-key (cdr (assoc 'key author)))
+                     (worklog-author (or (car (rassoc user-key jira-users))
+                                         (cdr (assoc 'displayName author))))
+                     (start-date (org-jira-get-worklog-val 'started worklog))
+                     (time-spent (org-jira-get-worklog-val 'timeSpent worklog))
+                     (worklog-headline (format "Worklog: %s %s %s" time-spent worklog-author start-date)))
                 (setq p (org-find-entry-with-id worklog-id))
                 (when (and p (>= p (point-min))
                            (<= p (point-max)))
@@ -795,8 +797,8 @@ See`org-jira-get-issue-list'"
                   (org-entry-put (point) "created" created)
                   (unless (string= created updated)
                     (org-entry-put (point) "updated" updated)))
-                (org-entry-put (point) "startDate" (org-jira-get-worklog-val 'startDate worklog))
-                (org-entry-put (point) "timeSpent" (org-jira-get-worklog-val 'timeSpent worklog))
+                (org-entry-put (point) "startDate" start-date)
+                (org-entry-put (point) "timeSpent" time-spent)
                 (goto-char (point-max))
                 (insert (replace-regexp-in-string "^" "  " (or (cdr (assoc 'comment worklog)) ""))))))
           worklogs)))
@@ -1179,6 +1181,7 @@ See`org-jira-get-issue-list'"
 
     (message "Update issue: description = %s" org-issue-description )
     (message "Update issue: assignee = %s" org-issue-assignee)
+    (message "Update issue: issuetype = %s" org-issue-type)
 
     (jiralib-update-issue issue-id
                           (list

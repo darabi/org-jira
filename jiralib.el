@@ -153,7 +153,7 @@ when invoking it through `jiralib-call', the call shoulbe be:
     ('getUser (jiralib--rest-call-it "user" :params `((username . ,(first params)))))
     ('getAssignableUsers (jiralib--rest-call-it "user/assignable/search" :params `((project . ,(first params))(maxResults . ,"1000"))))
     ('getVersions (jiralib--rest-call-it (format "project/%s/versions" (first params))))
-    ('getWorklogs nil) ; fixme
+    ('getWorklogs (jiralib--rest-call-it (format "issue/%s/worklog" (first params))))
     ('addComment (jiralib--rest-call-it
                   (format "issue/%s/comment" (first params))
                   :type "POST"
