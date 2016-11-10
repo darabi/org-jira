@@ -209,7 +209,14 @@ when invoking it through `jiralib-call', the call shoulbe be:
     ('updateIssue (jiralib--rest-call-it
                    (format "issue/%s" (first params))
                    :type "PUT"
-                   :data (json-encode `((fields . ,(second params))))))))
+                   :data (json-encode `((fields . ,(second params))))))
+    ('issueLink (jiralib--rest-call-it
+                   "issueLink"
+                   :type "POST"
+                   :data (json-encode `((type . ((name . ,(first params))))
+                                        (inwardIssue . ((key . ,(second params))))
+                                        (outwardIssue . ((key . ,(third params))))
+                                        ))))))
 
 (defun jiralib--utf-8-parser ()
   "Decode the HTTP response using the charset UTF-8."
@@ -550,6 +557,9 @@ ISSUE is a Hashtable object."
 SUBTASK is a Hashtable object."
   (jiralib-call "createIssueWithParent" subtask parent-issue-id))
 
+(defun jiralib-link-issues (link-type-name from-issue-id to-issue-id comment)
+ "Creates a link from issue with id FROM-ISSUE-ID to the issue with id TO-ISSUE-ID."
+ (jiralib-call "issueLink" link-type-name from-issue-id to-issue-id comment))
 
 (defvar jiralib-subtask-types-cache nil)
 
