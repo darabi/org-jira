@@ -462,7 +462,9 @@ See`org-jira-get-issue-list'"
   (message "Write Issue: %s" issue-id)
   (message "%s" (pp fields))
 
-  (let* ((issue-summary (cdr (assoc 'summary fields))))
+  (let* ((issue-summary (cdr (assoc 'summary fields)))
+         (issue-links (cdr (assoc 'issuelinks fields)))
+	 (worklogs (cdr (assoc 'worklogs fields)))) ;; TODO: if we don't receive the worklogs in fields, then call (jiralib-get-worklogs issue-id)
     (org-jira-mode t)
     (widen)
     (save-restriction
@@ -494,16 +496,15 @@ See`org-jira-get-issue-list'"
     (org-entry-put (point) "ID" issue-id)
 
     (org-jira-write-issue-headings '(description))
-    (newline)
-
     (org-jira-update-comments-for-current-issue)
-    (newline)
-    (org-jira-update-worklogs-for-current-issue)
-    (newline))
+    (when (> (length worklogs) 0)
+      (org-jira-update-worklogs-for-current-issue issue-id worklogs))
+    (when (> (length issue-links) 0)
+      (org-jira-update-issue-links-for-current-issue issue-id issue-links))
 
   (if (not (= (length (cdr (assoc 'subtasks fields))) 0))
       "(save-restriction
-        (mapc 'org-jira-handle-subtask (cdr (assoc 'subtasks fields))))"))
+        (mapc 'org-jira-handle-subtask (cdr (assoc 'subtasks fields))))")))
 
 (defun org-jira-handle-subtask (issue)
   (let* ((subtask-id (cdr (assoc 'key issue)))
@@ -650,7 +651,7 @@ See`org-jira-get-issue-list'"
   "Update a worklog for the current issue."
   (interactive)
   (let* ((issue-id (org-jira-get-from-org 'issue 'key))
-         (worklog-id (org-jira-get-from-org 'worklog 'key))
+         (worklog-id (org-jira-get-from-org 'worklog 'id))
          (already_submitted (org-jira-get-from-org 'worklog 'submitted_on))
          ;;(timeSpent (org-jira-get-from-org 'worklog 'timeSpent))
          (timeSpent (number-to-string (org-clock-sum-current-item)))
@@ -746,8 +747,8 @@ See`org-jira-get-issue-list'"
                   (org-narrow-to-subtree)
                   (delete-region (point-min) (point-max)))
                 (goto-char (point-max))
-                ;; (unless (looking-at "^")
-                ;;   (insert "\n"))
+                (unless (looking-at "^")
+                  (newline))
                 (insert "** ")
                 (insert comment-headline "\n")
                 (org-narrow-to-subtree)
@@ -765,10 +766,10 @@ See`org-jira-get-issue-list'"
                                          (list comment)))
                      comments))))
 
-(defun org-jira-update-worklogs-for-current-issue ()
+(defun org-jira-update-worklogs-for-current-issue (issue-id worklogs)
   "Update the worklogs for the current issue."
-  (let* ((issue-id (org-jira-get-from-org 'issue 'key))
-         (worklogs (cdr (assoc 'worklogs (jiralib-get-worklogs issue-id)))))
+  (when (> (length worklogs) 0)
+    (message "----- Updating worklogs for current issue: %s %s\\n%s" (type-of worklogs) issue-id worklogs)
     (mapc (lambda (worklog)
             (ensure-on-issue-id issue-id
               (let* ((worklog-id (cdr (assoc 'id worklog)))
@@ -802,6 +803,43 @@ See`org-jira-get-issue-list'"
                 (goto-char (point-max))
                 (insert (replace-regexp-in-string "^" "  " (or (cdr (assoc 'comment worklog)) ""))))))
           worklogs)))
+
+(defun org-jira-update-issue-links-for-current-issue (issue-id issue-links)
+  "Update the issue links for the current issue."
+  (mapc (lambda (link)
+          (ensure-on-issue-id issue-id
+            (let* ((link-id (cdr (assoc 'id link)))
+                   (outward-id (org-jira-find-value link 'outwardIssue 'id))
+                   (outward-key (org-jira-find-value link 'outwardIssue 'key))
+		   (inward-id (org-jira-find-value link 'inwardIssue 'id))
+		   (inward-key (org-jira-find-value link 'inwardIssue 'id))
+		   headline)
+	      (message "++++++++ %s inward: %s %s" issue-id inward-id inward-key)
+	      (message "++++++++ %s outward: %s %s" issue-id outward-id outward-key)
+              ;; (setq p (org-find-entry-with-id worklog-id))
+              ;; (when (and p (>= p (point-min))
+              ;;            (<= p (point-max)))
+              ;;   (goto-char p)
+              ;;   (org-narrow-to-subtree)
+              ;;   (delete-region (point-min) (point-max)))
+              ;; (goto-char (point-max))
+              ;; ;; (unless (looking-at "^")
+              ;; ;;   (insert "\n"))
+              ;; (insert "** ")
+              ;; (insert worklog-headline "\n")
+              ;; (org-narrow-to-subtree)
+              ;; (org-entry-put (point) "ID" worklog-id)
+              ;; (let ((created (org-jira-get-worklog-val 'created worklog))
+              ;;       (updated (org-jira-get-worklog-val 'updated worklog)))
+              ;;   (org-entry-put (point) "created" created)
+              ;;   (unless (string= created updated)
+              ;;     (org-entry-put (point) "updated" updated)))
+              ;; (org-entry-put (point) "startDate" start-date)
+              ;; (org-entry-put (point) "timeSpent" time-spent)
+              ;; (goto-char (point-max))
+              ;; (insert (replace-regexp-in-string "^" "  " (or (cdr (assoc 'comment worklog)) ""))))
+	    )))
+        issue-links))
 
 
 ;;;###autoload
